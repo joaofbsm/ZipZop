@@ -3,6 +3,7 @@
 
 """Messaging System Client Messages Exhibitor"""
 
+from __future__ import print_function
 import sys
 import socket
 import struct
@@ -11,6 +12,7 @@ __author__ = "João Francisco Martins and Victor Bernardo Jorge"
 
 # TODO
 # - Remove seq_id if it is not used in the code anymore
+# - Answer every message with ok
 
 #===================================METHODS===================================#
 
@@ -21,7 +23,8 @@ def create_msg(msg_type, source_id, target_id, msg_id, payload=None):
     'OI': 3, 
     'FLW': 4, 
     'MSG': 5, 
-    'CREQ': 6, 
+    'CREQ': 6,
+    'CLIST': 7, 
   }
 
   next_msg_id = msg_id
@@ -29,16 +32,18 @@ def create_msg(msg_type, source_id, target_id, msg_id, payload=None):
   if msg_type != 'OK' and msg_type != 'ERRO':
     next_msg_id += 1
 
-  msg_type = struct.pack("!H", type_to_int[msg_type])
+  converted_type = struct.pack("!H", type_to_int[msg_type])
   source_id = struct.pack("!H", source_id)
   target_id = struct.pack("!H", target_id)
   msg_id = struct.pack("!H", msg_id)
 
-  msg = msg_type + source_id + target_id + msg_id
+  msg = converted_type + source_id + target_id + msg_id
 
-  if payload:
+  if msg_type == 'MSG':
     c = struct.pack("!H", len(payload))
     msg += c + payload
+  elif msg_type == 'CLIST':
+    msg += payload
 
   return msg, next_msg_id
 
@@ -55,7 +60,7 @@ def receive_msg(s):
   if msg_type == 5:
     # Message is of type MSG and has content. Get size of content.
     msg_size = struct.unpack("!H", s.recv(2))[0] 
-    msg = emmiter.recv(msg_size)
+    msg = s.recv(msg_size)
 
   elif msg_type == 7:
     msg_size = struct.unpack("!H", s.recv(2))[0]
@@ -94,7 +99,7 @@ msg_type, source_id, target_id, msg_id, msg = receive_msg(exhibitor)
 if msg_type == 1:
   # Server returned OK message
   this_id = target_id
-  print "The id assigned to this exhibitor is", this_id
+  print("The id assigned to this exhibitor is", this_id)
 else:
   # Server returned with error
   emmiter.close()
@@ -102,11 +107,20 @@ else:
 
 while True:
   msg_type, source_id, target_id, msg_id, msg = receive_msg(exhibitor)
-  if msg_type == 5:  
-    # Message has type MSG
-    print "Message from", source_id + ":", msg
 
-  elif msg_type == 7:
-    # Message has type CLIST
-    print ("There are", msg[0], "clients connected to the server. These are th"
-           "eir ids:", msg[1])
+  if msg_type == 4:  # FLW message
+    # Send OK acknowledgement
+    msg = create_msg('OK', this_id, server_id, msg_id)[0]
+    send_msg(exhibitor, msg)
+    
+    # Close connection
+    exhibitor.close()
+    # End program
+    sys.exit()
+
+  if msg_type == 5:  # MSG message
+    print("Message from", str(source_id) + ":", msg)
+
+  elif msg_type == 7:  # CLIST message
+    print("There are", msg[0], "clients connected to the server. These are the"
+          "ir ids:", msg[1])

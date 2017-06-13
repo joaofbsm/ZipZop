@@ -3,6 +3,7 @@
 
 """Event-driven Messaging System Server"""
 
+from __future__ import print_function
 import sys
 import socket
 import struct
@@ -17,19 +18,23 @@ __author__ = "João Francisco Martins and Victor Bernardo Jorge"
 # - What happens on error when setting emitter? Try again? - DIE
 # - Show error on emitter's screen? - SIM 
 # QUESTIONS
+# - Correct way to get server IP?
 # - Can I kill client after check identity fail?
 # - What should I do in OK and ERROR messages?
 # - Should we change target_id to each target in broadcast?
 
 # TODO
-# - Test if blocking sockets works
-# - Test simultaneous connection close
 # - Add docstrings
 # - Treat error on MSG sending in emitter: Show on screen
 # - Send OK as reply to every arriving message
-# - Add print log to OK and ERRO received messages
-# - Use delete client function to remove from dicts
+# - Add print LOG to OK and ERRO received messages
 # - Get server IP in another way
+# - Reposition methods
+# - LOG header of messages between clients
+# - Remove list and dic receiving as return
+# - Make message redirecting in CREQ(Make a function)
+# - Implement extra
+
 
 #===================================METHODS===================================#
 
@@ -83,7 +88,7 @@ def receive_msg(s):
   if msg_type == 5:
     # Message is of type MSG and has content. Get size of content.
     content_size = struct.unpack("!H", s.recv(2))[0] 
-    msg = server.recv(content_size)
+    msg = s.recv(content_size)
 
   return msg_type, source_id, target_id, msg_id, msg
 
@@ -104,10 +109,12 @@ def get_free_id(client_type, id_to_socket):
 
   return free_id
 
-def add_client(s, target_id, id_to_socket, emit_to_exhibit):
+# TODO: Make associate clients a new function
+def add_client(s, source_id, id_to_socket, emit_to_exhibit):
   client_type = ""
+  associated_id = None
 
-  if target_id == 0:
+  if source_id == 0:
     client_type = "exhibitor"
   else:
     client_type = "emitter"
@@ -116,42 +123,70 @@ def add_client(s, target_id, id_to_socket, emit_to_exhibit):
 
   if client_id == -1:
     # Couldn't find a free id for that client
+    print("[ERROR] Couldn't accept new client: All ids are occupied.")
     return None, id_to_socket, emit_to_exhibit
 
-  id_to_socket[target_id] = (s, client_type)  # Maps id to socket
+  id_to_socket[client_id] = (s, client_type)  # Maps id to socket
 
-  if 2 ** 12 <= target_id < 2 ** 13:
-    # Emitter(client_id) wants to be associated to an exhibitor(target_id)
-    if target_id in id_to_socket and target_id not in emit_to_exhibit.values():
-      emit_to_exhibit[client_id] = target_id 
+  if 2 ** 12 <= source_id < 2 ** 13:
+    # Emitter(client_id) wants to be associated to an exhibitor(source_id)
+    if source_id in id_to_socket and source_id not in emit_to_exhibit.values():
+      # Exhibitor exists and is not associated to anyone yet
+      emit_to_exhibit[client_id] = source_id 
+      associated_id = source_id
     else:
+      print("[ERROR] Couldn't accept new client: Emitter tried to link with an"
+             " invalid exhibitor.")
       return None, id_to_socket, emit_to_exhibit
 
-  print "[LOG] New", client_type, "with id", client_id, "has been assigned."
+  print("[LOG] New", client_type, "with id", client_id, "has been assigned.")
+  if associated_id:
+    print("[LOG] Exhibitor", associated_id, "is now associated with emitter",
+          client_id) 
   return client_id, id_to_socket, emit_to_exhibit
 
 def delete_client(client_id, id_to_socket, emit_to_exhibit):
-  pass
+  del id_to_socket[client_id]
+
+  if client_id in emit_to_exhibit:
+    # Client had an exhibitor assigned to it
+    del emit_to_exhibit[client_id]
+
+  elif client_id in emit_to_exhibit.values():
+    # Client had an emitter assigned to it. Get emitter key and remove entry.
+    key = emit_to_exhibit.keys()[emit_to_exhibit.values().index(client_id)]
+    del emit_to_exhibit[key]
+
+def get_socket_id(s, id_to_socket):
+  for client_id, client_info in id_to_socket.iteritems():
+    if client_info[0] == s:
+      return client_id
+  return None
 
 def check_identity(client_id, s, id_to_socket):
   return id_to_socket[client_id][0] == s
 
 def is_emitter(client_id, id_to_socket):
-  return id_to_socket[client_id][2] == "emitter"
+  return id_to_socket[client_id][1] == "emitter"
 
 def is_exhibitor(client_id, id_to_socket):
-  return id_to_socket[client_id][2] == "exhibitor" 
+  return id_to_socket[client_id][1] == "exhibitor" 
 
 def has_exhibitor(client_id, emit_to_exhibit):
   return client_id in emit_to_exhibit
 
 def get_clist_payload(id_to_socket):
   n = 0  # Number of connected clients
-  clients = "" 
+  client_ids = [] 
 
   for client_id in id_to_socket:
-    clients += struct.pack("!H", client_id)
+    client_ids.append(client_id)
     n += 1
+
+  client_ids.sort()
+  clients = ""
+  for client in client_ids:
+    clients += struct.pack("!H", client)
 
   return struct.pack("!H", n) + clients
 
@@ -183,34 +218,38 @@ while True:
     if s is server:
       # A client has requested a connection
       client_socket, client_address = s.accept()
-      print "[LOG] Client", client_address, "is now connected."
+      print("[LOG] Client", client_address, "is now connected.")
       connected_sockets.append(client_socket)
     else:
       msg_type, source_id, target_id, msg_id, msg = receive_msg(s)
 
       if msg_type == 1:  # OK message
         if check_identity(source_id, s, id_to_socket):
-          print "OK"
+          print("OK")
         else:
           # Identity check fail. Kill client.
-          print ("[LOG] Client", s.getpeername(), "has been killed due to bad "
-                 "identity credentials.")
+          print("[ERROR] Client ", s.getpeername(), " has been killed due to b"
+                 "ad identity credentials.")
+          client_id = get_socket_id(s, id_to_socket)
+          delete_client(client_id, id_to_socket, emit_to_exhibit)
           connected_sockets.remove(s)
           s.close()
 
       elif msg_type == 2:  # ERRO message
         if check_identity(source_id, s, id_to_socket):
-          print "ERRO"
+          print("ERRO")
         else:
           # Identity check fail. Kill client.
-          print ("[LOG] Client", s.getpeername(), "has been killed due to bad "
-                 "identity credentials.")
+          print("[ERROR] Client ", s.getpeername(), " has been killed due to b"
+                 "ad identity credentials.")
+          client_id = get_socket_id(s, id_to_socket)
+          delete_client(client_id, id_to_socket, emit_to_exhibit)
           connected_sockets.remove(s)
           s.close()
 
       elif msg_type == 3:  # OI message
         client_id, id_to_socket, emit_to_exhibit = add_client(s, 
-                                                              target_id, 
+                                                              source_id, 
                                                               id_to_socket, 
                                                               emit_to_exhibit)
         if client_id:
@@ -224,6 +263,7 @@ while True:
 
       elif msg_type == 4:  # FLW message
         if check_identity(source_id, s, id_to_socket):
+          # Sends OK to emitter
           msg = create_msg('OK', server_id, source_id, msg_id)[0]
           send_msg(s, msg)
 
@@ -231,27 +271,34 @@ while True:
             if has_exhibitor(source_id, emit_to_exhibit):
               # If emitter had an exhibitor assigned, request it to die
               exhibitor_id = emit_to_exhibit[source_id]
-              exhibitor_socket = id_to_socket[exhibitor_id]
+              exhibitor_socket = id_to_socket[exhibitor_id][0]
 
               # Sends FLW to exhibitor
-              msg, seq_id = create_msg('FLW', server_id, source_id, seq_id)
+              msg, seq_id = create_msg('FLW', server_id, exhibitor_id, seq_id)
               send_msg(exhibitor_socket, msg)
 
               # Receives OK from exhibitor. No treatment needed.
               receive_msg(exhibitor_socket) 
 
+              print("[LOG] Exhibitor", exhibitor_id, "has been disconnected: F"
+                    "LW.")
               # Closes connection to exhibitor
+              delete_client(exhibitor_id, id_to_socket, emit_to_exhibit)
               connected_sockets.remove(exhibitor_socket)
               exhibitor_socket.close()
 
+          print("[LOG] Emitter", source_id, "has been disconnected: FLW.")
           # Closes connection to emitter
+          delete_client(source_id, id_to_socket, emit_to_exhibit)
           connected_sockets.remove(s)
           s.close()
 
         else:
           # Identity check fail. Kill client.
-          print ("[LOG] Client", s.getpeername(), "has been killed due to bad "
+          print("[ERROR] Client", s.getpeername(), "has been killed due to bad"
                  "identity credentials.")
+          client_id = get_socket_id(s, id_to_socket)
+          delete_client(client_id, id_to_socket, emit_to_exhibit)
           connected_sockets.remove(s)
           s.close()
 
@@ -273,7 +320,7 @@ while True:
             elif has_exhibitor(target_id, emit_to_exhibit):
               # Target is emitter but have an exhibitor associated
               exhibitor_id = emit_to_exhibit[target_id]
-              exhibitor_socket = id_to_socket[exhibitor_id]
+              exhibitor_socket = id_to_socket[exhibitor_id][0]
 
               # Redirects message to associated exhibitor
               send_msg(exhibitor_socket, msg)
@@ -290,8 +337,8 @@ while True:
 
         else:
           # Identity check fail. Kill client.
-          print ("[LOG] Client", s.getpeername(), "has been killed due to bad "
-                 "identity credentials.")
+          print("[ERROR] Client ", s.getpeername(), " has been killed due to b"
+                 "ad identity credentials.")
           connected_sockets.remove(s)
           s.close()
 
@@ -335,13 +382,17 @@ while True:
 
         else:
           # Identity check fail. Kill client.
-          print ("[LOG] Client", s.getpeername(), "has been killed due to bad "
-                 "identity credentials.")
+          print("[ERROR] Client ", s.getpeername(), " has been killed due to b"
+                 "ad identity credentials.")
+          client_id = get_socket_id(s, id_to_socket)
+          delete_client(client_id, id_to_socket, emit_to_exhibit)
           connected_sockets.remove(s)
           s.close()
 
       else:
-        # A client has closed the connection
-        print "[LOG] Client", s.getpeername(), "has been disconnected."
+        # TODO - CHANGE TO ID AND REMOVE FROM LISTS(?)
+        # NOT SURE IF THIS HAPPENS
+        # A client has closed the connection.
+        print("[LOG] Client", s.getpeername(), "has been disconnected.")
         connected_sockets.remove(s)
         s.close()

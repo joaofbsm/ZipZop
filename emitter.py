@@ -1,8 +1,9 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-"""Messaging System Client Messages emitter"""
+"""Messaging System Client Messages Emitter"""
 
+from __future__ import print_function
 import sys
 import socket
 import struct
@@ -11,8 +12,11 @@ __author__ = "João Francisco Martins and Victor Bernardo Jorge"
 
 # TODO
 # - Compile all the functions in the same socket_utils.py file
-# - Maybe transform the elifs in server to a swtich with dictionaries
+# - Maybe transform the elifs in server to a switch with dictionaries
 # - Make the message error resistant
+# - Show message errors on screen
+# - Show this_id on screen after connect
+# - Answer every message with ok
 
 #===================================METHODS===================================#
 
@@ -23,7 +27,8 @@ def create_msg(msg_type, source_id, target_id, msg_id, payload=None):
     'OI': 3, 
     'FLW': 4, 
     'MSG': 5, 
-    'CREQ': 6, 
+    'CREQ': 6,
+    'CLIST': 7, 
   }
 
   next_msg_id = msg_id
@@ -31,16 +36,18 @@ def create_msg(msg_type, source_id, target_id, msg_id, payload=None):
   if msg_type != 'OK' and msg_type != 'ERRO':
     next_msg_id += 1
 
-  msg_type = struct.pack("!H", type_to_int[msg_type])
+  converted_type = struct.pack("!H", type_to_int[msg_type])
   source_id = struct.pack("!H", source_id)
   target_id = struct.pack("!H", target_id)
   msg_id = struct.pack("!H", msg_id)
 
-  msg = msg_type + source_id + target_id + msg_id
+  msg = converted_type + source_id + target_id + msg_id
 
-  if payload:
+  if msg_type == 'MSG':
     c = struct.pack("!H", len(payload))
     msg += c + payload
+  elif msg_type == 'CLIST':
+    msg += payload
 
   return msg, next_msg_id
 
@@ -79,7 +86,7 @@ oi_id = 1  # id used in OI message for setup
 
 if len(sys.argv) == 3:
   # If an exhibitor number has been given
-  oi_id = sys.argv[2]
+  oi_id = int(sys.argv[2])
 
 # Sends the OI message after connection to server
 msg, seq_id = create_msg('OI', oi_id, server_id, seq_id)
@@ -96,11 +103,11 @@ else:
   sys.exit("Couldn't estabilish a proper connection.")
 
 # Format to send messages
-print ("To specify the message's target, at the beginning of a new message, wr"
-       "ite, between parentheses, the exhibitor ID or 0 for broadcast. For the"
-       " special cases of FLW and CREQ messages, specify their TYPE inside the"
-       " parentheses and, for the later case, write the target id(or 0 for bro"
-       "adcast) right after the closing parentheses.\n")
+print("\nTo specify the message's target, at the beginning of a new message, w"
+      "rite, between parentheses, the exhibitor ID or 0 for broadcast. For the"
+      " special cases of FLW and CREQ messages, specify their TYPE inside the "
+      "parentheses and, for the later case, write the target id(or 0 for broad"
+      "cast) after the closing parentheses.\n")
 
 while True:
   # Send message
@@ -109,7 +116,9 @@ while True:
 
   if parameter == 'FLW':
     # Send FLW message
+    print("FLW")
     msg, seq_id = create_msg('FLW', this_id, server_id, seq_id)
+    print(msg)
     send_msg(emitter, msg)
 
     # Wait for server OK. No treatment needed.
@@ -117,6 +126,7 @@ while True:
 
     # Close connection
     emitter.close()
+    # End program
     sys.exit()
 
   elif parameter == 'CREQ':
