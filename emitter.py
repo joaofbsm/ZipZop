@@ -15,7 +15,7 @@ __author__ = "João Francisco Martins and Victor Bernardo Jorge"
 
 #===================================METHODS===================================#
 
-def create_msg(msg_type, source_id, target_id, msg_id, payload=None):
+def create_msg(msg_type, orig_id, dest_id, msg_id, payload=None):
   type_to_int = {
     'OK': 1, 
     'ERRO': 2, 
@@ -32,11 +32,11 @@ def create_msg(msg_type, source_id, target_id, msg_id, payload=None):
     next_msg_id += 1
 
   converted_type = struct.pack("!H", type_to_int[msg_type])
-  source_id = struct.pack("!H", source_id)
-  target_id = struct.pack("!H", target_id)
+  orig_id = struct.pack("!H", orig_id)
+  dest_id = struct.pack("!H", dest_id)
   msg_id = struct.pack("!H", msg_id)
 
-  msg = converted_type + source_id + target_id + msg_id
+  msg = converted_type + orig_id + dest_id + msg_id
 
   if msg_type == 'MSG':
     c = struct.pack("!H", len(payload))
@@ -51,8 +51,8 @@ def send_msg(s, msg):
 
 def receive_msg(s):
   msg_type = struct.unpack("!H", s.recv(2))[0]
-  source_id = struct.unpack("!H", s.recv(2))[0]
-  target_id = struct.unpack("!H", s.recv(2))[0]
+  orig_id = struct.unpack("!H", s.recv(2))[0]
+  dest_id = struct.unpack("!H", s.recv(2))[0]
   msg_id = struct.unpack("!H", s.recv(2))[0]
   msg = None
 
@@ -61,7 +61,7 @@ def receive_msg(s):
     msg_size = struct.unpack("!H", s.recv(2))[0] 
     msg = s.recv(msg_size)
 
-  return msg_type, source_id, target_id, msg_id, msg
+  return msg_type, orig_id, dest_id, msg_id, msg
 
 def represents_int(s):
   try:
@@ -82,7 +82,7 @@ emitter = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 emitter.connect(ADDR)
 
 server_id = (2 ** 16) - 1
-seq_id = 0  # Sequence number for messages begins at 0
+seq_id = 0  # Sequence number for messages
 this_id = 0  # The id for this client in the system
 oi_id = 1  # id used in OI message for setup
 
@@ -95,15 +95,17 @@ msg, seq_id = create_msg('OI', oi_id, server_id, seq_id)
 send_msg(emitter, msg)
 
 # Receives server response with the client id
-msg_type, source_id, target_id, msg_id, msg = receive_msg(emitter)
+msg_type, orig_id, dest_id, msg_id, msg = receive_msg(emitter)
 if msg_type == 1:
   # Server returned OK message
-  this_id = target_id
-  print("The id assigned to this emitter is", this_id)
+  this_id = dest_id
+  print("The id assigned to this emitter is", str(this_id) + ".")
+  if oi_id != 1:
+    print("The exhibitor id associated with this emitter is", str(oi_id) + ".")
 else:
   # Server returned with error
   emitter.close()
-  sys.exit("Couldn't estabilish a proper connection")
+  sys.exit("Couldn't estabilish a proper connection.")
 
 # Format to send messages
 print("\nThere are three types of messages. Their formats are as follows:\n\n"
@@ -134,18 +136,18 @@ while True:
     sys.exit()
 
   elif parameter == 'CREQ':
-    target_id = msg[msg.find(")")+1:]
-    if represents_int(target_id):
-      msg, seq_id = create_msg('CREQ', this_id, int(target_id), seq_id)
+    dest_id = msg[msg.find(")")+1:]
+    if represents_int(dest_id):
+      msg, seq_id = create_msg('CREQ', this_id, int(dest_id), seq_id)
       send_msg(emitter, msg)
 
       # Wait for server response
-      msg_type, source_id, target_id, msg_id, msg = receive_msg(emitter)
+      msg_type, orig_id, dest_id, msg_id, msg = receive_msg(emitter)
 
       if msg_type == 1 and msg_id == seq_id:  # OK msg
         continue
       if msg_type == 2 and msg_id == seq_id:  # ERRO msg
-        print("Couldn't deliver message to that id")
+        print("Couldn't deliver message to that id.")
       elif msg_type == 4:  # FLW msg
         # Server has died, answer with OK
         msg = create_msg('OK', this_id, server_id, msg_id)[0]
@@ -154,20 +156,20 @@ while True:
         emitter.close()
       elif msg_type != 1:  
         # MSG is not OK either. An error has occurred.
-        print("Messages have not been delivered")
+        print("Messages have not been delivered.")
 
     else:
-      print("Invalid CREQ message id")
+      print("Invalid CREQ message id.")
 
   elif represents_int(parameter):
-    # Message is of type MSG. parameter contains target_id
+    # Message is of type MSG. parameter contains dest_id
     msg = msg[msg.find(")")+1:]
 
     msg, seq_id = create_msg('MSG', this_id, int(parameter), seq_id, msg)
     send_msg(emitter, msg)
 
     # Wait for server response
-    msg_type, source_id, target_id, msg_id, msg = receive_msg(emitter)
+    msg_type, orig_id, dest_id, msg_id, msg = receive_msg(emitter)
 
     if msg_type == 1 and msg_id == seq_id:  # OK msg
       continue
@@ -184,10 +186,10 @@ while True:
       break
     elif msg_type != 1:  
       # MSG is not OK either. An error has occurred.
-      print("Messages have not been delivered")
+      print("Message have not been delivered.")
 
   else:
-    print("Invalid message entered")
+    print("Invalid message entered.")
 
   # Receive message(Only for FLW)
 
