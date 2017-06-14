@@ -11,12 +11,7 @@ import struct
 __author__ = "João Francisco Martins and Victor Bernardo Jorge"
 
 # TODO
-# - Compile all the functions in the same socket_utils.py file
-# - Maybe transform the elifs in server to a switch with dictionaries
-# - Make the message error resistant
-# - Show message errors on screen
-# - Show this_id on screen after connect
-# - Answer every message with ok
+#
 
 #===================================METHODS===================================#
 
@@ -68,6 +63,13 @@ def receive_msg(s):
 
   return msg_type, source_id, target_id, msg_id, msg
 
+def represents_int(s):
+  try:
+    int(s)
+    return True
+  except ValueError:
+    return False
+
 #====================================MAIN=====================================# 
 
 # Set up socket address
@@ -97,6 +99,7 @@ msg_type, source_id, target_id, msg_id, msg = receive_msg(emitter)
 if msg_type == 1:
   # Server returned OK message
   this_id = target_id
+  print("The id assigned to this emitter is", this_id)
 else:
   # Server returned with error
   emitter.close()
@@ -116,9 +119,7 @@ while True:
 
   if parameter == 'FLW':
     # Send FLW message
-    print("FLW")
     msg, seq_id = create_msg('FLW', this_id, server_id, seq_id)
-    print(msg)
     send_msg(emitter, msg)
 
     # Wait for server OK. No treatment needed.
@@ -130,15 +131,60 @@ while True:
     sys.exit()
 
   elif parameter == 'CREQ':
-    target_id = int(msg[msg.find(")")+1:])
-    msg, seq_id = create_msg('CREQ', this_id, target_id, seq_id)
-    send_msg(emitter, msg)
+    target_id = msg[msg.find(")")+1:]
+    if represents_int(target_id):
+      msg, seq_id = create_msg('CREQ', this_id, int(target_id), seq_id)
+      send_msg(emitter, msg)
 
-  else:
+      # Wait for server response
+      msg_type, source_id, target_id, msg_id, msg = receive_msg(emitter)
+
+      if msg_type == 1 and msg_id == seq_id:  # OK msg
+        continue
+      if msg_type == 2 and msg_id == seq_id:  # ERRO msg
+        print("Couldn't deliver message to that id.")
+      elif msg_type == 4:  # FLW msg
+        # Server has died, answer with OK
+        msg = create_msg('OK', this_id, server_id, msg_id)[0]
+        send_msg(emitter, msg)
+
+        emitter.close()
+      elif msg_type != 1:  
+        # MSG is not OK either. An error has occurred.
+        print("Messages have not been delivered.")
+
+    else:
+      print("Invalid CREQ message id.")
+
+  elif represents_int(parameter):
     # Message is of type MSG. parameter contains target_id
     msg = msg[msg.find(")")+1:]
+
     msg, seq_id = create_msg('MSG', this_id, int(parameter), seq_id, msg)
     send_msg(emitter, msg)
+
+    # Wait for server response
+    msg_type, source_id, target_id, msg_id, msg = receive_msg(emitter)
+
+    if msg_type == 1 and msg_id == seq_id:  # OK msg
+      continue
+    if msg_type == 2 and msg_id == seq_id:  # ERRO msg
+      print("Couldn't deliver message to that id.")
+    elif msg_type == 4:  # FLW msg
+      # Server has died, answer with OK
+      msg = create_msg('OK', this_id, server_id, msg_id)[0]
+      send_msg(emitter, msg)
+
+      # Close connection
+      emitter.close()
+      # End script
+      break
+    elif msg_type != 1:  
+      # MSG is not OK either. An error has occurred.
+      print("Messages have not been delivered.")
+
+  else:
+    print("Invalid message entered.")
 
   # Receive message(Only for FLW)
 

@@ -12,7 +12,6 @@ __author__ = "João Francisco Martins and Victor Bernardo Jorge"
 
 # TODO
 # - Remove seq_id if it is not used in the code anymore
-# - Answer every message with ok
 
 #===================================METHODS===================================#
 
@@ -115,12 +114,20 @@ while True:
     
     # Close connection
     exhibitor.close()
-    # End program
-    sys.exit()
+    # End script
+    break
 
   if msg_type == 5:  # MSG message
     print("Message from", str(source_id) + ":", msg)
 
+    msg = create_msg('OK', this_id, source_id, msg_id)[0]
+    send_msg(exhibitor, msg)
+
+
   elif msg_type == 7:  # CLIST message
     print("There are", msg[0], "clients connected to the server. These are the"
           "ir ids:", msg[1])
+
+    msg = create_msg('OK', this_id, source_id, msg_id)[0]
+    send_msg(exhibitor, msg)
+
