@@ -11,15 +11,9 @@ import select
 
 __author__ = "João Francisco Martins and Victor Bernardo Jorge"
 
-# ANSWERED QUESTIONS
-# - Do we need to pack the MSG message in network byte order? - ONLY C
-# - OI message adds to Number Sequence? - YES
-# - What happens if the exhibitor doesn't answer with OK? - NOTHING
-# - What happens on error when setting emitter? Try again? - DIE
-# - Show error on emitter's screen? - SIM 
 # QUESTIONS
 # - Correct way to get server IP?
-# - Can I kill client after check identity fail? - IT DOESNT MATTER
+# - Can I kill client after check identity fail? - IT DOESNT MATTER.
 # - What should I do in OK and ERROR messages?
 # - Should we change target_id to each target in broadcast?
 
@@ -28,13 +22,12 @@ __author__ = "João Francisco Martins and Victor Bernardo Jorge"
 # - Get server IP in another way
 # - LOG header of messages between clients
 # - Remove list and dic receiving as return
-# - Make message redirecting in CREQ(Make a function)
 # - Implement extra
 # - Substitute all excessive parameters with client_maps
 # - Maybe transform the elifs in server to a switch with dictionaries
 # - Compile all the functions in the same socket_utils.py file
-# - Create send_ok
 # - Make message a dictionary with labelled fields
+# - When receiving zero byte messages not working properly
 
 # WORK PLAN
 # - Do all simple TODOs
@@ -84,18 +77,24 @@ def send_broadcast(id_to_socket, msg):
       send_msg(exhibitor_socket, msg)
 
 def receive_msg(s):
-  msg_type = struct.unpack("!H", s.recv(2))[0]
-  source_id = struct.unpack("!H", s.recv(2))[0]
-  target_id = struct.unpack("!H", s.recv(2))[0]
-  msg_id = struct.unpack("!H", s.recv(2))[0]
-  msg = None
+  msg_type = s.recv(2)
 
-  if msg_type == 5:
-    # Message is of type MSG and has content. Get size of content.
-    content_size = struct.unpack("!H", s.recv(2))[0] 
-    msg = s.recv(content_size)
+  if msg_type:
+    msg_type = struct.unpack("!H", msg_type)[0]
+    source_id = struct.unpack("!H", s.recv(2))[0]
+    target_id = struct.unpack("!H", s.recv(2))[0]
+    msg_id = struct.unpack("!H", s.recv(2))[0]
+    msg = None
 
-  return msg_type, source_id, target_id, msg_id, msg
+    if msg_type == 5:
+      # Message is of type MSG and has content. Get size of content.
+      content_size = struct.unpack("!H", s.recv(2))[0] 
+      msg = s.recv(content_size)
+
+    return msg_type, source_id, target_id, msg_id, msg
+
+  else:
+    return None, None, None, None, None
 
 # TODO: Make associate clients a new function
 def add_client(s, source_id, id_to_socket, emit_to_exhibit):
@@ -111,8 +110,8 @@ def add_client(s, source_id, id_to_socket, emit_to_exhibit):
 
   if client_id == -1:
     # Couldn't find a free id for that client
-    print("[ERROR] Couldn't accept new client: All ids are occupied.")
-    return None, id_to_socket, emit_to_exhibit
+    print("[ERROR] Couldn't accept new client: All ids are occupied")
+    return None
 
   id_to_socket[client_id] = (s, client_type)  # Maps id to socket
 
@@ -124,14 +123,14 @@ def add_client(s, source_id, id_to_socket, emit_to_exhibit):
       associated_id = source_id
     else:
       print("[ERROR] Couldn't accept new client: Emitter tried to link with an"
-             " invalid exhibitor.")
-      return None, id_to_socket, emit_to_exhibit
+             " invalid exhibitor")
+      return None
 
-  print("[LOG] New", client_type, "with id", client_id, "has been assigned.")
+  print("[LOG] New", client_type, "with id", client_id, "has been assigned")
   if associated_id:
     print("[LOG] Exhibitor", associated_id, "is now associated with emitter",
           client_id) 
-  return client_id, id_to_socket, emit_to_exhibit
+  return client_id
 
 def remove_client(client_id, id_to_socket, emit_to_exhibit):
   del id_to_socket[client_id]
@@ -197,15 +196,24 @@ def get_clist_payload(id_to_socket):
 
 def kill_client(s, err, connected_sockets, id_to_socket, emit_to_exhibit):
   err_msg = {
-    "bad_id": ("[ERROR] Client", get_socket_id(s), "has been killed due to bad"
-               " identity credentials."),
-    "con_dead": ("[LOG] Client", get_socket_id(s), "has been disconnected.")
+    "bad_id": ("[ERROR] Client " + str(get_socket_id(s, id_to_socket)) + " has"
+               " been killed due to bad identity credentials"),
+    "con_dead": ("[LOG] Client " + str(get_socket_id(s, id_to_socket)) + " has"
+                 " been disconnected"),
+    "oi_fail": ("[ERROR] Client " + str(get_socket_id(s, id_to_socket)) + " ha"
+                "s been disconnected due to fail on connection setup")
   }
   print(err_msg[err])
   client_id = get_socket_id(s, id_to_socket)
   remove_client(client_id, id_to_socket, emit_to_exhibit)
   connected_sockets.remove(s)
   s.close()
+
+def send_OK(s, source_id, client_id, msg_id):
+  send_msg(s, create_msg('OK', server_id, source_id, msg_id)[0])
+
+def send_ERRO(s, source_id, client_id, msg_id):
+  send_msg(s, create_msg('ERRO', server_id, source_id, msg_id)[0])
 
 # NOT IMPLEMENTED. DIVIDE INTO SUBFUNCTIONS
 def process_msg(msg_type, source_id, target_id, msg_id, msg, expected_id):
@@ -255,7 +263,7 @@ while True:
     if s is server:
       # A client has requested a connection
       client_socket, client_address = s.accept()
-      print("[LOG] Client", client_address, "is now connected.")
+      print("[LOG] Client", client_address, "is now connected")
       connected_sockets.append(client_socket)
 
     else:
@@ -263,7 +271,7 @@ while True:
 
       if msg_type == 1:  # OK message
         if check_identity(source_id, s, id_to_socket):
-          print("OK message from", source_id)
+          print("[LOG] Received OK message from id ", source_id)
 
         else:
           # Identity check fail. Kill client.
@@ -277,24 +285,20 @@ while True:
           kill_client(s, "bad_id", connected_sockets, *client_maps)
 
       elif msg_type == 3:  # OI message
-        client_id, id_to_socket, emit_to_exhibit = add_client(s, 
-                                                              source_id, 
-                                                              id_to_socket, 
-                                                              emit_to_exhibit)
+        client_id = add_client(s, source_id, *client_maps)
         if client_id:
           # Client was successfully added
-          msg = create_msg('OK', server_id, client_id, msg_id)[0]
+          send_OK(s, server_id, client_id, msg_id)
+
         else:
           # Some error ocurred when trying to add client
-          msg = create_msg('ERRO', server_id, source_id, msg_id)[0]
-
-        send_msg(s, msg)
+          send_ERRO(s, server_id, source_id, msg_id)
+          kill_client(s, "oi_fail", connected_sockets, *client_maps)
 
       elif msg_type == 4:  # FLW message
         if check_identity(source_id, s, id_to_socket):
           # Sends OK to emitter
-          msg = create_msg('OK', server_id, source_id, msg_id)[0]
-          send_msg(s, msg)
+          send_ok(s, server_id, source_id, msg_id)
 
           if is_emitter(source_id, id_to_socket):
             if has_exhibitor(source_id, emit_to_exhibit):
@@ -310,13 +314,13 @@ while True:
               receive_msg(exhibitor_socket) 
 
               print("[LOG] Exhibitor", exhibitor_id, "has been disconnected: F"
-                    "LW.")
+                    "LW")
               # Closes connection to exhibitor
               remove_client(exhibitor_id, id_to_socket, emit_to_exhibit)
               connected_sockets.remove(exhibitor_socket)
               exhibitor_socket.close()
 
-          print("[LOG] Emitter", source_id, "has been disconnected: FLW.")
+          print("[LOG] Emitter", source_id, "has been disconnected: FLW")
           # Closes connection to emitter
           remove_client(source_id, id_to_socket, emit_to_exhibit)
           connected_sockets.remove(s)
@@ -332,8 +336,7 @@ while True:
           if target_id == 0:
             # Broadcast message. Overhead of recreating message.
             send_broadcast(id_to_socket, msg)
-            send_msg(s, create_msg('OK', server_id, source_id, msg_id)[0])
-
+            send_OK(s, server_id, source_id, msg_id)
 
           elif target_id in id_to_socket:
             # Target client exists
@@ -341,7 +344,7 @@ while True:
               # Target is an exhibitor
 
               # Answer message with OK
-              send_msg(s, create_msg('OK', server_id, source_id, msg_id)[0])
+              send_OK(s, server_id, source_id, msg_id)
 
               # Send message to exhibitor
               exhibitor_socket = id_to_socket[target_id][0]
@@ -356,7 +359,7 @@ while True:
               # Target is emitter but have an exhibitor associated
 
               # Answer message with OK
-              send_msg(s, create_msg('OK', server_id, source_id, msg_id)[0])
+              send_OK(s, server_id, source_id, msg_id)
 
               # Redirects message to associated exhibitor
               exhibitor_id = emit_to_exhibit[target_id]
@@ -368,20 +371,15 @@ while True:
 
             else:
               # Target is an emitter with no associated exhibitor
-              msg = create_msg('ERRO', server_id, target_id, msg_id)[0]
-              send_msg(s, msg)
+              send_ERRO(s, server_id, source_id, msg_id)
 
           else:
             # Target is not a client
-            msg = create_msg('ERRO', server_id, target_id, msg_id)[0]
-            send_msg(s, msg)
+            send_ERRO(s, server_id, source_id, msg_id)
 
         else:
           # Identity check fail. Kill client.
-          print("[ERROR] Client ", s.getpeername(), " has been killed due to b"
-                 "ad identity credentials.")
-          connected_sockets.remove(s)
-          s.close()
+          kill_client(s, "bad_id", connected_sockets, *client_maps)
 
       elif msg_type == 6:  # CREQ message
         if check_identity(source_id, s, id_to_socket):
@@ -394,7 +392,7 @@ while True:
           if target_id == 0:
             # Broadcast message
             send_broadcast(id_to_socket, msg)
-            send_msg(s, create_msg('OK', server_id, source_id, msg_id)[0])
+            send_OK(s, server_id, source_id, msg_id)
 
           elif target_id in id_to_socket:
             # Target client exists
@@ -402,7 +400,7 @@ while True:
               # Target is an exhibitor
 
               # Answer message with OK
-              send_msg(s, create_msg('OK', server_id, source_id, msg_id)[0])
+              send_OK(s, server_id, source_id, msg_id)
 
               # Send message to exhibitor
               exhibitor_socket = id_to_socket[target_id][0]
@@ -415,7 +413,7 @@ while True:
               # Target is emitter but have an exhibitor associated
 
               # Answer message with OK
-              send_msg(s, create_msg('OK', server_id, source_id, msg_id)[0])
+              send_OK(s, server_id, source_id, msg_id)
 
               # Redirects message to associated exhibitor
               exhibitor_id = emit_to_exhibit[target_id]
@@ -427,13 +425,11 @@ while True:
 
             else:
               # Target is an emitter with no associated exhibitor
-              msg = create_msg('ERRO', server_id, source_id, msg_id)[0]
-              send_msg(s, msg)
+              send_ERRO(s, server_id, source_id, msg_id)
 
           else:
             # Target is not a client
-            msg = create_msg('ERRO', server_id, target_id, msg_id)[0]
-            send_msg(s, msg)
+            send_ERRO(s, server_id, source_id, msg_id)
 
         else:
           # Identity check fail. Kill client.

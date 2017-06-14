@@ -103,14 +103,17 @@ if msg_type == 1:
 else:
   # Server returned with error
   emitter.close()
-  sys.exit("Couldn't estabilish a proper connection.")
+  sys.exit("Couldn't estabilish a proper connection")
 
 # Format to send messages
-print("\nTo specify the message's target, at the beginning of a new message, w"
-      "rite, between parentheses, the exhibitor ID or 0 for broadcast. For the"
-      " special cases of FLW and CREQ messages, specify their TYPE inside the "
-      "parentheses and, for the later case, write the target id(or 0 for broad"
-      "cast) after the closing parentheses.\n")
+print("\nThere are three types of messages. Their formats are as follows:\n\n"
+      " 1. > (id) MESSAGE\n"
+      " 2. > (CREQ) id\n"
+      " 3. > (FLW)\n\n"
+      "The first one sends MESSAGE to the specified exhibitor id(or emitter in"
+      " the case of associated pairs). The second one sends a CLIST message to"
+      " id. The third and last disconnects the socket from the server. In the "
+      "first two, use 0 as id to execute a broadcast.\n")
 
 while True:
   # Send message
@@ -142,7 +145,7 @@ while True:
       if msg_type == 1 and msg_id == seq_id:  # OK msg
         continue
       if msg_type == 2 and msg_id == seq_id:  # ERRO msg
-        print("Couldn't deliver message to that id.")
+        print("Couldn't deliver message to that id")
       elif msg_type == 4:  # FLW msg
         # Server has died, answer with OK
         msg = create_msg('OK', this_id, server_id, msg_id)[0]
@@ -151,10 +154,10 @@ while True:
         emitter.close()
       elif msg_type != 1:  
         # MSG is not OK either. An error has occurred.
-        print("Messages have not been delivered.")
+        print("Messages have not been delivered")
 
     else:
-      print("Invalid CREQ message id.")
+      print("Invalid CREQ message id")
 
   elif represents_int(parameter):
     # Message is of type MSG. parameter contains target_id
@@ -181,10 +184,10 @@ while True:
       break
     elif msg_type != 1:  
       # MSG is not OK either. An error has occurred.
-      print("Messages have not been delivered.")
+      print("Messages have not been delivered")
 
   else:
-    print("Invalid message entered.")
+    print("Invalid message entered")
 
   # Receive message(Only for FLW)
 
