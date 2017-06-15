@@ -12,13 +12,9 @@ import server_utils as utils
 
 __author__ = "João Francisco Martins and Victor Bernardo Jorge"
 
-# TODO
-# - Test on Ubuntu
-# - Change how to get server address in final version
-
 #====================================MAIN=====================================#
 
-HOST = "127.0.0.1" #socket.gethostbyname(socket.getfqdn())
+HOST = socket.gethostbyname(socket.getfqdn())
 PORT = int(sys.argv[1])
 ADDR = (HOST, PORT)
 

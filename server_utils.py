@@ -279,6 +279,9 @@ def process_OI(msg, s, conn_socks, id_to_sock, emi_to_exh):
     kill_client(s, "oi_fail", conn_socks, id_to_sock, emi_to_exh)
 
 def process_FLW(msg, s, conn_socks, id_to_sock, emi_to_exh):
+  print("[LOG] Received FLW message from client ", msg['orig_id'], ".", 
+        sep = "")
+
   # Sends OK to emitter
   send_OK(s, serv_id, msg['orig_id'], msg['id'])
 
@@ -286,6 +289,9 @@ def process_FLW(msg, s, conn_socks, id_to_sock, emi_to_exh):
     # If is emitter and had an exhibitor assigned, request it to die
     exhibitor_id = emi_to_exh[msg['orig_id']]
     exhibitor_socket = id_to_sock[exhibitor_id][0]
+
+    print("[LOG] Sending FLW message to client ", exhibitor_id, "(associated e"
+          "xhibitor).", sep = "")
 
     # Sends FLW to exhibitor
     msg = create_msg('FLW', serv_id, exhibitor_id, 0)[0]
