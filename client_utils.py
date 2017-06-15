@@ -16,6 +16,7 @@ serv_id = (2 ** 16) - 1  # Server id
 
 #===================================METHODS===================================#
 
+# Create and pack a message with the parameters
 def create_msg(msg_type, orig_id, dest_id, msg_id, payload=None):
   type_to_int = {
     'OK': 1, 
@@ -46,12 +47,15 @@ def create_msg(msg_type, orig_id, dest_id, msg_id, payload=None):
 
   return msg, next_msg_id
 
+# Send OK message to given socket
 def send_OK(s, orig_id, dest_id, msg_id):
   s.send(create_msg('OK', orig_id, dest_id, msg_id)[0])
 
+# Send FLW message to given socket
 def send_FLW(s, orig_id, dest_id, msg_id):
   s.send(create_msg('FLW', orig_id, dest_id, msg_id)[0])
 
+# Receives and split message, saving it to a dictionary 
 def receive_msg(s):
   msg = {}
   msg_type = s.recv(2)
@@ -84,6 +88,7 @@ def receive_msg(s):
     # Empty message has been received. Client has disconnected.
     return None
 
+# Process responses received by the emitter only
 def process_msg(msg, s, this_id, seq_id):
   if msg['type'] == 1 and msg['id'] == (seq_id - 1):  # OK msg
     return 
@@ -92,7 +97,7 @@ def process_msg(msg, s, this_id, seq_id):
 
   elif msg['type'] == 4:  # FLW msg
     # Server has died, answer with OK
-    msg = utils.create_msg('OK', this_id, serv_id, msg['id'])[0]
+    msg = create_msg('OK', this_id, serv_id, msg['id'])[0]
     s.send(msg)
 
     print("Message server has been shutdown.")
@@ -106,6 +111,7 @@ def process_msg(msg, s, this_id, seq_id):
     # An error has occurred
     print("Messages have not been delivered.")
 
+# Setup id for clients by sending the OI message to the server
 def execute_OI(s, oi_id):
   # Sends the OI message after connection to server
   msg, seq_id = create_msg('OI', oi_id, serv_id, 0)
@@ -129,6 +135,7 @@ def execute_OI(s, oi_id):
     s.close()
     sys.exit("Couldn't estabilish a proper connection.")
 
+# Execute FLW, ending with the program execution
 def execute_FLW(s, orig_id, msg_id):
     # Send FLW message
     send_FLW(s, orig_id, serv_id, msg_id)
@@ -141,6 +148,7 @@ def execute_FLW(s, orig_id, msg_id):
     # End program
     sys.exit()
 
+# Check if a given string represents an integer
 def represents_int(s):
   try:
     int(s)

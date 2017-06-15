@@ -15,6 +15,7 @@ serv_id = (2 ** 16) - 1 # Server id to use as source on messages
 
 #===================================METHODS===================================#
 
+# Create and pack a message with the parameters
 def create_msg(msg_type, orig_id, dest_id, msg_id, payload=None):
   type_to_int = {
     'OK': 1, 
@@ -46,6 +47,7 @@ def create_msg(msg_type, orig_id, dest_id, msg_id, payload=None):
 
   return msg, next_msg_id
 
+# Generate and return the payload for the CLIST message
 def create_clist_payload(id_to_sock):
   n = 0  # Number of connected clients
   client_ids = [] 
@@ -61,26 +63,31 @@ def create_clist_payload(id_to_sock):
 
   return struct.pack("!H", n) + clients
 
+# Send message and process the received response
 def deliver_msg(msg, s, conn_socks, id_to_sock, emi_to_exh):
   s.send(msg)
   # Receive confirmation
   response = receive_msg(s)
   process_msg(response, s, conn_socks, id_to_sock, emi_to_exh)
 
+# Send message to every exhibitor connected and process the received response
 def deliver_broadcast(msg, s, conn_socks, id_to_sock, emi_to_exh):
   for client_id in id_to_sock:
     if id_to_sock[client_id][1] == "exhibitor":
       exhibitor_socket = id_to_sock[client_id][0]
       deliver_msg(msg, exhibitor_socket, conn_socks, id_to_sock, emi_to_exh)
 
+# Send OK message to given socket and print LOG
 def send_OK(s, orig_id, dest_id, msg_id):
   print("[LOG] Sending OK message to client ", dest_id, ".", sep = "")
   s.send(create_msg('OK', orig_id, dest_id, msg_id)[0])
 
+# Send ERRO message to given socket and print LOG
 def send_ERRO(s, orig_id, dest_id, msg_id):
   print("[LOG] Sending ERRO message to client ", dest_id, ".", sep = "")
   s.send(create_msg('ERRO', orig_id, dest_id, msg_id)[0])
 
+# Send message to id. In case of emitter, if possible, redirects to exhibitor.
 def send_to_id(msg, s, orig_msg, conn_socks, id_to_sock, emi_to_exh):
   if orig_msg['dest_id'] == 0:
     # Broadcast message
@@ -116,6 +123,7 @@ def send_to_id(msg, s, orig_msg, conn_socks, id_to_sock, emi_to_exh):
     print("[ERROR] Target is not a client.")
     return False
 
+# Receives and split message, saving it to a dictionary 
 def receive_msg(s):
   msg = {}
   msg_type = s.recv(2)
@@ -138,6 +146,7 @@ def receive_msg(s):
     # Empty message has been received. Client has disconnected.
     return None
 
+# Tries to add new client and maybe link two of them
 def add_client(s, orig_id, id_to_sock, emi_to_exh):
   client_type = ""
   associated_id = None
@@ -173,6 +182,7 @@ def add_client(s, orig_id, id_to_sock, emi_to_exh):
           , client_id, ".", sep = "") 
   return client_id
 
+# Remove client from mappings(id_to_sock and emi_to_exh)
 def remove_client(client_id, id_to_sock, emi_to_exh):
   del id_to_sock[client_id]
 
@@ -185,6 +195,7 @@ def remove_client(client_id, id_to_sock, emi_to_exh):
     key = emi_to_exh.keys()[emi_to_exh.values().index(client_id)]
     del emi_to_exh[key]
 
+# Finds and return a free id to assign to a new client
 def get_free_id(client_type, id_to_sock):
   free_id = -1
 
@@ -202,24 +213,30 @@ def get_free_id(client_type, id_to_sock):
 
   return free_id
 
+# Get the client id for a given socket object
 def get_socket_id(s, id_to_sock):
   for client_id, client_info in id_to_sock.iteritems():
     if client_info[0] == s:
       return client_id
   return None
 
+# Returns True if client is an emitter
 def is_emitter(client_id, id_to_sock):
   return id_to_sock[client_id][1] == "emitter"
 
+# Returns True if client is an exhibitor
 def is_exhibitor(client_id, id_to_sock):
   return id_to_sock[client_id][1] == "exhibitor" 
 
+# Returns True if client is an emitter with an associated exhibitor
 def has_exhibitor(client_id, emi_to_exh):
   return client_id in emi_to_exh
 
+# Check if a socket object and an id point to the same client
 def check_identity(client_id, s, id_to_sock):
   return id_to_sock[client_id][0] == s
 
+# Process every message received by the server by calling sub process functions
 def process_msg(msg, s, conn_socks, id_to_sock, emi_to_exh):
   process = {
     1: process_OK,
@@ -328,6 +345,7 @@ def process_CREQ(msg, s, conn_socks, id_to_sock, emi_to_exh):
     # Answer emitter with OK
     send_OK(s, serv_id, msg['orig_id'], msg['id'])
 
+# Kill a client connection, removing it from mappings and printing LOG
 def kill_client(s, log, conn_socks, id_to_sock, emi_to_exh):
   log_msg = {
     "bad_id": ("[ERROR] Client " + str(get_socket_id(s, id_to_sock)) + " has b"
@@ -356,6 +374,7 @@ def kill_client(s, log, conn_socks, id_to_sock, emi_to_exh):
   conn_socks.remove(s)
   s.close()
 
+# If CTRL+C was received, sends FLW to every client and waits for OK response
 def broadcast_FLW(conn_socks, id_to_sock, emi_to_exh):
   print("\n[ANNOUNCEMENT] SERVER IS SHUTTING DOWN.")
   for client_id in id_to_sock:

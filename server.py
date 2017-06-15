@@ -12,23 +12,9 @@ import server_utils as utils
 
 __author__ = "João Francisco Martins and Victor Bernardo Jorge"
 
-# QUESTIONS
-# - Correct way to get server IP? - GETFQDN
-# - Can I kill client after check identity fail? - YES
-# - Should we change dest_id to each target in broadcast? - NO
-# - Server need seq_id? - NO
-
 # TODO
-# - Add docstrings
+# - Test on Ubuntu
 # - Change how to get server address in final version
-# - Implement extra -> except KeyboardInterrupt
-# - Compile all the functions in the same server_utils.py file
-# - Make serv_id a global constant
-
-# WORK PLAN
-# - Add CTRL-C treatment to both clients
-# - Add comments to code 
-# - GG WP
 
 #====================================MAIN=====================================#
 
@@ -68,7 +54,7 @@ while True:
           # Process received message according to its type
           utils.process_msg(msg, s, conn_socks, id_to_sock, emi_to_exh)
         else:
-          # A client has closed the connection.
+          # A client has closed the connection
           utils.kill_client(s, "con_dead", conn_socks, id_to_sock, emi_to_exh)
   except KeyboardInterrupt:
     # Send FLW to every connected client, wait for OK and close all connections
