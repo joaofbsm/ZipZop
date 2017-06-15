@@ -25,9 +25,11 @@ __author__ = "João Francisco Martins and Victor Bernardo Jorge"
 # - Make serv_id a global constant
 
 # WORK PLAN
-# - Do all simple TODOs
-# - Create module for unified methods
-# - Simplify methods/mains
+# - Create server_utils and client_utils
+# - Simplify emitter main
+# - Add CTRL-C treatment to both clients
+# - Add comments to code 
+# - GG WP
 
 #===================================METHODS===================================#
 
@@ -285,7 +287,7 @@ def process_OI(msg, s, conn_socks, id_to_sock, emi_to_exh):
 
   else:
     # Some error ocurred when trying to add client
-    send_ERRO(s, serv_id, msg['orig_id'], msg['id'])
+    send_ERRO(s, serv_id, 0, msg['id'])
     kill_client(s, "oi_fail", conn_socks, id_to_sock, emi_to_exh)
 
 def process_FLW(msg, s, conn_socks, id_to_sock, emi_to_exh):
@@ -293,7 +295,7 @@ def process_FLW(msg, s, conn_socks, id_to_sock, emi_to_exh):
   send_OK(s, serv_id, msg['orig_id'], msg['id'])
 
   if has_exhibitor(msg['orig_id'], emi_to_exh):
-    # If is emitter had an exhibitor assigned, request it to die
+    # If is emitter and had an exhibitor assigned, request it to die
     exhibitor_id = emi_to_exh[msg['orig_id']]
     exhibitor_socket = id_to_sock[exhibitor_id][0]
 
@@ -366,7 +368,18 @@ def kill_client(s, log, conn_socks, id_to_sock, emi_to_exh):
     "con_dead": ("[LOG] Client " + str(get_socket_id(s, id_to_sock)) + " has b"
                  "een disconnected.")
   }
+  
   print(log_msg[log])
+
+  client_id = get_socket_id(s, id_to_sock)
+
+  if has_exhibitor(client_id, emi_to_exh):
+    # If is emitter and had an exhibitor assigned, request it to die
+    exhibitor_id = emi_to_exh[client_id]
+    exhibitor_socket = id_to_sock[exhibitor_id][0]
+
+    kill_client(exhibitor_socket, log, conn_socks, id_to_sock, emi_to_exh)
+
   client_id = get_socket_id(s, id_to_sock)
   remove_client(client_id, id_to_sock, emi_to_exh)
   conn_socks.remove(s)
@@ -417,14 +430,11 @@ while True:
         client_socket, client_address = s.accept()
         conn_socks.append(client_socket)
         print("[LOG] Client", client_address, "is now connected.")
-
       else:
         msg = receive_msg(s)
-
         if msg:
           # Process received message according to its type
           process_msg(msg, s, conn_socks, id_to_sock, emi_to_exh)
-
         else:
           # A client has closed the connection.
           kill_client(s, "con_dead", conn_socks, id_to_sock, emi_to_exh)
