@@ -49,30 +49,41 @@ def create_msg(msg_type, orig_id, dest_id, msg_id, payload=None):
 def send_msg(s, msg):
   s.sendall(msg)
 
+def send_OK(s, orig_id, dest_id, msg_id):
+  s.send(create_msg('OK', orig_id, dest_id, msg_id)[0])
+
 def receive_msg(s):
-  msg_type = struct.unpack("!H", s.recv(2))[0]
-  orig_id = struct.unpack("!H", s.recv(2))[0]
-  dest_id = struct.unpack("!H", s.recv(2))[0]
-  msg_id = struct.unpack("!H", s.recv(2))[0]
-  msg = None
+  msg = {}
+  msg_type = s.recv(2)
 
-  if msg_type == 5:
-    # Message is of type MSG and has content. Get size of content.
-    msg_size = struct.unpack("!H", s.recv(2))[0] 
-    msg = s.recv(msg_size)
+  if msg_type:
+    msg['type'] = struct.unpack("!H", msg_type)[0]
+    msg['orig_id'] = struct.unpack("!H", s.recv(2))[0]
+    msg['dest_id'] = struct.unpack("!H", s.recv(2))[0]
+    msg['id'] = struct.unpack("!H", s.recv(2))[0]
+    msg['msg'] = None
 
-  elif msg_type == 7:
-    msg_size = struct.unpack("!H", s.recv(2))[0]
-    msg = ""
-    for i in range(msg_size):
-      msg += str(struct.unpack("!H", s.recv(2))[0])
-      if i != msg_size - 1:
-        # If not last element
-        msg += ", "
+    if msg['type'] == 5:
+      # Message has type MSG and has content. Get size of content.
+      content_size = struct.unpack("!H", s.recv(2))[0] 
+      msg['msg'] = s.recv(content_size)
 
-    msg = [msg_size, msg]
+    elif msg['type'] == 7:
+      # Message has type CLIST
+      clist_size = struct.unpack("!H", s.recv(2))[0]
+      clist = ""
+      for i in range(clist_size):
+        clist += str(struct.unpack("!H", s.recv(2))[0])
+        if i != clist_size - 1:
+          # If not last element
+          clist += ", "
+      msg['msg'] = [clist_size, clist]
 
-  return msg_type, orig_id, dest_id, msg_id, msg
+    return msg
+
+  else:
+    # Empty message has been received. Client has disconnected.
+    return None
   
 #====================================MAIN=====================================#
 
@@ -94,40 +105,39 @@ msg, seq_id = create_msg('OI', this_id, 0, seq_id)
 send_msg(exhibitor, msg)
 
 # Receives server response with the client id
-msg_type, orig_id, dest_id, msg_id, msg = receive_msg(exhibitor)
-if msg_type == 1:
+msg = receive_msg(exhibitor)
+if msg['type'] == 1:
   # Server returned OK message
-  this_id = dest_id
-  print("The id assigned to this exhibitor is", this_id, ".")
+  this_id = msg['dest_id']
+  print("The id assigned to this exhibitor is", str(this_id) + ".")
 else:
   # Server returned with error
-  emmiter.close()
+  exhibitor.close()
   sys.exit("Couldn't estabilish a proper connection.")
 
 while True:
-  msg_type, orig_id, dest_id, msg_id, msg = receive_msg(exhibitor)
+  msg = receive_msg(exhibitor)
 
-  if msg_type == 4:  # FLW message
+  if msg['type'] == 4:  # FLW message
     # Send OK acknowledgement
-    msg = create_msg('OK', this_id, server_id, msg_id)[0]
-    send_msg(exhibitor, msg)
+    send_OK(exhibitor, this_id, server_id, msg['id'])
+
+    print("Received a FLW message. Shutting down now.")
     
     # Close connection
     exhibitor.close()
+
     # End script
     break
 
-  if msg_type == 5:  # MSG message
-    print("Message from", str(orig_id) + ":", msg)
+  if msg['type'] == 5:  # MSG message
+    print("Message from", str(msg['orig_id']) + ":", msg['msg'])
 
-    msg = create_msg('OK', this_id, orig_id, msg_id)[0]
-    send_msg(exhibitor, msg)
+    send_OK(exhibitor, this_id, msg['orig_id'], msg['id'])
 
+  elif msg['type'] == 7:  # CLIST message
+    print("There are", msg['msg'][0], "clients connected to the server. These are the"
+          "ir ids:", msg['msg'][1])
 
-  elif msg_type == 7:  # CLIST message
-    print("There are", msg[0], "clients connected to the server. These are the"
-          "ir ids:", msg[1])
-
-    msg = create_msg('OK', this_id, orig_id, msg_id)[0]
-    send_msg(exhibitor, msg)
+    send_OK(exhibitor, this_id, msg['orig_id'], msg['id'])
 

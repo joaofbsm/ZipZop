@@ -11,7 +11,9 @@ import struct
 __author__ = "João Francisco Martins and Victor Bernardo Jorge"
 
 # TODO
-#
+# - Make msg as dictionary
+# - Separate files in server_utils, client_utils and system_utils
+# - Maybe set socket to non blocking
 
 #===================================METHODS===================================#
 
@@ -50,18 +52,37 @@ def send_msg(s, msg):
   s.sendall(msg)
 
 def receive_msg(s):
-  msg_type = struct.unpack("!H", s.recv(2))[0]
-  orig_id = struct.unpack("!H", s.recv(2))[0]
-  dest_id = struct.unpack("!H", s.recv(2))[0]
-  msg_id = struct.unpack("!H", s.recv(2))[0]
-  msg = None
+  msg = {}
+  msg_type = s.recv(2)
 
-  if msg_type == 5:
-    # Message is of type MSG and has content. Get size of content.
-    msg_size = struct.unpack("!H", s.recv(2))[0] 
-    msg = s.recv(msg_size)
+  if msg_type:
+    msg['type'] = struct.unpack("!H", msg_type)[0]
+    msg['orig_id'] = struct.unpack("!H", s.recv(2))[0]
+    msg['dest_id'] = struct.unpack("!H", s.recv(2))[0]
+    msg['id'] = struct.unpack("!H", s.recv(2))[0]
+    msg['msg'] = None
 
-  return msg_type, orig_id, dest_id, msg_id, msg
+    if msg['type'] == 5:
+      # Message has type MSG and has content. Get size of content.
+      content_size = struct.unpack("!H", s.recv(2))[0] 
+      msg['msg'] = s.recv(content_size)
+
+    elif msg['type'] == 7:
+      # Message has type CLIST
+      clist_size = struct.unpack("!H", s.recv(2))[0]
+      clist = ""
+      for i in range(clist_size):
+        clist += str(struct.unpack("!H", s.recv(2))[0])
+        if i != clist_size - 1:
+          # If not last element
+          clist += ", "
+      msg['msg'] = [clist_size, clist]
+
+    return msg
+
+  else:
+    # Empty message has been received. Client has disconnected.
+    return None
 
 def represents_int(s):
   try:
@@ -95,10 +116,10 @@ msg, seq_id = create_msg('OI', oi_id, server_id, seq_id)
 send_msg(emitter, msg)
 
 # Receives server response with the client id
-msg_type, orig_id, dest_id, msg_id, msg = receive_msg(emitter)
-if msg_type == 1:
+msg = receive_msg(emitter)
+if msg['type'] == 1:
   # Server returned OK message
-  this_id = dest_id
+  this_id = msg['dest_id']
   print("The id assigned to this emitter is", str(this_id) + ".")
   if oi_id != 1:
     print("The exhibitor id associated with this emitter is", str(oi_id) + ".")
@@ -114,7 +135,7 @@ print("\nThere are three types of messages. Their formats are as follows:\n\n"
       " 3. > (FLW)\n\n"
       "The first one sends MESSAGE to the specified exhibitor id(or emitter in"
       " the case of associated pairs). The second one sends a CLIST message to"
-      " id. The third and last disconnects the socket from the server. In the "
+      " id. The third and last disconnects the client from the server. In the "
       "first two, use 0 as id to execute a broadcast.\n")
 
 while True:
@@ -142,20 +163,26 @@ while True:
       send_msg(emitter, msg)
 
       # Wait for server response
-      msg_type, orig_id, dest_id, msg_id, msg = receive_msg(emitter)
+      msg = receive_msg(emitter)
 
-      if msg_type == 1 and msg_id == seq_id:  # OK msg
+      if msg['type'] == 1 and msg['id'] == (seq_id - 1):  # OK msg
         continue
-      if msg_type == 2 and msg_id == seq_id:  # ERRO msg
+      elif msg['type'] == 2 and msg['id'] == (seq_id - 1):  # ERRO msg
         print("Couldn't deliver message to that id.")
-      elif msg_type == 4:  # FLW msg
+      elif msg['type'] == 4:  # FLW msg
         # Server has died, answer with OK
-        msg = create_msg('OK', this_id, server_id, msg_id)[0]
+        msg = create_msg('OK', this_id, server_id, msg['id'])[0]
         send_msg(emitter, msg)
 
+        print("Message server has been shutdown.")
+
+        # Close connection
         emitter.close()
-      elif msg_type != 1:  
-        # MSG is not OK either. An error has occurred.
+        
+        # End script
+        break
+      else:
+        # An error has occurred
         print("Messages have not been delivered.")
 
     else:
@@ -169,29 +196,29 @@ while True:
     send_msg(emitter, msg)
 
     # Wait for server response
-    msg_type, orig_id, dest_id, msg_id, msg = receive_msg(emitter)
+    msg = receive_msg(emitter)
 
-    if msg_type == 1 and msg_id == seq_id:  # OK msg
+    if msg['type'] == 1 and msg['id'] == (seq_id - 1):  # OK msg
       continue
-    if msg_type == 2 and msg_id == seq_id:  # ERRO msg
+    elif msg['type'] == 2 and msg['id'] == (seq_id - 1):  # ERRO msg
       print("Couldn't deliver message to that id.")
-    elif msg_type == 4:  # FLW msg
+    elif msg['type'] == 4:  # FLW msg
       # Server has died, answer with OK
-      msg = create_msg('OK', this_id, server_id, msg_id)[0]
+      msg = create_msg('OK', this_id, server_id, msg['id'])[0]
       send_msg(emitter, msg)
+
+      print("Message server has been shutdown.")
 
       # Close connection
       emitter.close()
+      
       # End script
-      break
-    elif msg_type != 1:  
-      # MSG is not OK either. An error has occurred.
-      print("Message have not been delivered.")
+      break 
+    else:
+      # An error has occurred
+      print("Messages have not been delivered.")
 
   else:
     print("Invalid message entered.")
-
-  # Receive message(Only for FLW)
-
 
 

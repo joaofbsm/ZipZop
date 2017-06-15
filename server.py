@@ -21,7 +21,7 @@ __author__ = "João Francisco Martins and Victor Bernardo Jorge"
 # - Add docstrings
 # - Change how to get server address in final version
 # - Implement extra -> except KeyboardInterrupt
-# - Compile all the functions in the same socket_utils.py file
+# - Compile all the functions in the same server_utils.py file
 # - Make serv_id a global constant
 
 # WORK PLAN
@@ -90,16 +90,17 @@ def deliver_broadcast(msg, s, conn_socks, id_to_sock, emi_to_exh):
       deliver_msg(msg, exhibitor_socket, conn_socks, id_to_sock, emi_to_exh)
 
 def send_OK(s, orig_id, dest_id, msg_id):
+  print("[LOG] Sending OK message to client ", dest_id, ".", sep = "")
   s.send(create_msg('OK', orig_id, dest_id, msg_id)[0])
 
 def send_ERRO(s, orig_id, dest_id, msg_id):
+  print("[LOG] Sending ERRO message to client ", dest_id, ".", sep = "")
   s.send(create_msg('ERRO', orig_id, dest_id, msg_id)[0])
 
 def send_to_id(msg, s, orig_msg, conn_socks, id_to_sock, emi_to_exh):
   if orig_msg['dest_id'] == 0:
     # Broadcast message
     deliver_broadcast(msg, s, conn_socks, id_to_sock, emi_to_exh)
-    
     return True
 
   elif orig_msg['dest_id'] in id_to_sock:
@@ -110,8 +111,8 @@ def send_to_id(msg, s, orig_msg, conn_socks, id_to_sock, emi_to_exh):
       # Send message to exhibitor
       exhibitor_socket = id_to_sock[orig_msg['dest_id']][0]
       deliver_msg(msg, exhibitor_socket, conn_socks, id_to_sock, emi_to_exh)
-
       return True
+
     elif has_exhibitor(orig_msg['dest_id'], emi_to_exh):
       # Target is emitter but have an exhibitor associated
 
@@ -119,14 +120,16 @@ def send_to_id(msg, s, orig_msg, conn_socks, id_to_sock, emi_to_exh):
       exhibitor_id = emi_to_exh[orig_msg['dest_id']]
       exhibitor_socket = id_to_sock[exhibitor_id][0]
       deliver_msg(msg, exhibitor_socket, conn_socks, id_to_sock, emi_to_exh)
-
       return True
+
     else:
       # Target is an emitter with no associated exhibitor
+      print("[ERROR] Target is an emitter with no associated exhibitor.")
       return False
 
   else:
     # Target is not a client
+    print("[ERROR] Target is not a client.")
     return False
 
 def receive_msg(s):
@@ -145,13 +148,13 @@ def receive_msg(s):
       content_size = struct.unpack("!H", s.recv(2))[0] 
       msg['msg'] = s.recv(content_size)
 
-    elif msg_type == 7:
+    elif msg['type'] == 7:
       # Message has type CLIST
       clist_size = struct.unpack("!H", s.recv(2))[0]
       clist = ""
       for i in range(clist_size):
         clist += str(struct.unpack("!H", s.recv(2))[0])
-        if i != msg_size - 1:
+        if i != clist_size - 1:
           # If not last element
           clist += ", "
       msg['msg'] = [clist_size, clist]
@@ -193,8 +196,8 @@ def add_client(s, orig_id, id_to_sock, emi_to_exh):
 
   print("[LOG] New", client_type, "with id", client_id, "has been assigned.")
   if associated_id:
-    print("[LOG] Exhibitor", associated_id, "is now associated with emitter",
-          client_id, ".") 
+    print("[LOG] Exhibitor ", associated_id, " is now associated with emitter "
+          , client_id, ".", sep = "") 
   return client_id
 
 def remove_client(client_id, id_to_sock, emi_to_exh):
@@ -296,11 +299,7 @@ def process_FLW(msg, s, conn_socks, id_to_sock, emi_to_exh):
 
     # Sends FLW to exhibitor
     msg = create_msg('FLW', serv_id, exhibitor_id, 0)[0]
-    deliver_msg(exhibitor_socket, msg)
-
-    # Receives OK from exhibitor
-    response = receive_msg(exhibitor_socket) 
-    process_msg(msg, s, conn_socks, id_to_sock, emi_to_exh)
+    deliver_msg(msg, exhibitor_socket, conn_socks, id_to_sock, emi_to_exh)
 
     # Closes connection to associated exhibitor
     kill_client(exhibitor_socket, 
@@ -373,6 +372,18 @@ def kill_client(s, log, conn_socks, id_to_sock, emi_to_exh):
   conn_socks.remove(s)
   s.close()
 
+def broadcast_FLW(conn_socks, id_to_sock, emi_to_exh):
+  print("\n[ANNOUNCEMENT] SERVER IS SHUTTING DOWN.")
+  for client_id in id_to_sock:
+    client_socket = id_to_sock[client_id][0]
+
+    print("[LOG] Sending FLW message to client ", client_id, ".", sep = "")
+    msg = create_msg('FLW', serv_id, client_id, 0)[0]
+    deliver_msg(msg, client_socket, conn_socks, id_to_sock, emi_to_exh)
+
+    conn_socks.remove(client_socket)
+    client_socket.close()
+
 #====================================MAIN=====================================#
 
 HOST = "127.0.0.1" #socket.gethostbyname(socket.getfqdn())
@@ -389,7 +400,8 @@ server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
 server.bind(ADDR)
 server.listen(1)
 
-print("[LOG] Server is now running at address", HOST, "and port", PORT, ".")
+print("[LOG] Server is now running at address ", HOST, " and port ", PORT, ".",
+      sep = "")
 
 serv_id = (2 ** 16) - 1  # Server id to use as source on messages
 conn_socks = [server]  # Connected Sockets. Server is "connected" to itself
@@ -397,21 +409,31 @@ id_to_sock = {}  # Dictionary that maps client ids to (socket, type)
 emi_to_exh = {}  # Dictionary that maps emitters to exhibitors
 
 while True:
-  readable, writable, exceptional = select.select(conn_socks, [], [])
-  for s in readable:  
-    if s is server:
-      # A client has requested a connection
-      client_socket, client_address = s.accept()
-      conn_socks.append(client_socket)
-      print("[LOG] Client", client_address, "is now connected.")
-
-    else:
-      msg = receive_msg(s)
-
-      if msg:
-        # Process received message according to its type
-        process_msg(msg, s, conn_socks, id_to_sock, emi_to_exh)
+  try:
+    readable, writable, exceptional = select.select(conn_socks, [], [])
+    for s in readable:  
+      if s is server:
+        # A client has requested a connection
+        client_socket, client_address = s.accept()
+        conn_socks.append(client_socket)
+        print("[LOG] Client", client_address, "is now connected.")
 
       else:
-        # A client has closed the connection.
-        kill_client(s, "con_dead", conn_socks, id_to_sock, emi_to_exh)
+        msg = receive_msg(s)
+
+        if msg:
+          # Process received message according to its type
+          process_msg(msg, s, conn_socks, id_to_sock, emi_to_exh)
+
+        else:
+          # A client has closed the connection.
+          kill_client(s, "con_dead", conn_socks, id_to_sock, emi_to_exh)
+  except KeyboardInterrupt:
+    # Send FLW to every connected client, wait for OK and close all connections
+    broadcast_FLW(conn_socks, id_to_sock, emi_to_exh)
+
+    # Close connection handling socket
+    server.close()
+
+    # End loop and program
+    break
