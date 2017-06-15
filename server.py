@@ -20,10 +20,8 @@ __author__ = "João Francisco Martins and Victor Bernardo Jorge"
 # TODO
 # - Add docstrings
 # - Change how to get server address in final version
-# - LOG header of messages between clients
 # - Implement extra -> except KeyboardInterrupt
 # - Compile all the functions in the same socket_utils.py file
-# - Receive OK from all clients in broadcast
 # - Make serv_id a global constant
 
 # WORK PLAN
@@ -269,12 +267,12 @@ def process_msg(msg, s, conn_socks, id_to_sock, emi_to_exh):
       kill_client(s, "bad_id", conn_socks, id_to_sock, emi_to_exh)
 
 def process_OK(msg, s, conn_socks, id_to_sock, emi_to_exh):
-  print("[LOG] Received OK message with id", msg['id'], "from id", 
-        msg['orig_id'])
+  print("[LOG] Received OK message with id ", msg['id'], " from client ", 
+        msg['orig_id'], ".", sep = "")
 
 def process_ERRO(msg, s, conn_socks, id_to_sock, emi_to_exh):
-  print("[LOG] Received ERRO message with id", msg['id'], "from client", 
-        msg['orig_id'])
+  print("[LOG] Received ERRO message with id ", msg['id'], " from client ", 
+        msg['orig_id'], ".", sep = "")
 
 def process_OI(msg, s, conn_socks, id_to_sock, emi_to_exh):
   client_id = add_client(s, msg['orig_id'], id_to_sock, emi_to_exh)
@@ -321,6 +319,12 @@ def process_MSG(msg, s, conn_socks, id_to_sock, emi_to_exh):
                        msg['dest_id'], 
                        msg['id'], 
                        msg['msg'])[0]
+
+  if msg['dest_id'] == 0:
+    print("[LOG] Client", msg['orig_id'], "has sent a broadcast message.")
+  else:
+    print("[LOG] Client ", msg['orig_id'], " has sent a message to client ", 
+          msg['dest_id'], ".", sep = "")
   
   sent = send_to_id(fwd_msg, s, msg, conn_socks, id_to_sock, emi_to_exh)
   if not sent:
@@ -337,6 +341,12 @@ def process_CREQ(msg, s, conn_socks, id_to_sock, emi_to_exh):
                          msg['dest_id'], 
                          msg['id'], 
                          clist_payload)[0]
+
+  if msg['dest_id'] == 0:
+    print("[LOG] Client", msg['orig_id'], "has sent a broadcast CLIST.")
+  else:
+    print("[LOG] Client ", msg['orig_id'], " has sent a CLIST to client ", 
+          msg['dest_id'], ".", sep = "")
 
   sent = send_to_id(clist_msg, s, msg, conn_socks, id_to_sock, emi_to_exh)
   if not sent:
