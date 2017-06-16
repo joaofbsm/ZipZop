@@ -47,13 +47,16 @@ def create_msg(msg_type, orig_id, dest_id, msg_id, payload=None):
 
   return msg, next_msg_id
 
+
 # Send OK message to given socket
 def send_OK(s, orig_id, dest_id, msg_id):
   s.send(create_msg('OK', orig_id, dest_id, msg_id)[0])
 
+
 # Send FLW message to given socket
 def send_FLW(s, orig_id, dest_id, msg_id):
   s.send(create_msg('FLW', orig_id, dest_id, msg_id)[0])
+
 
 # Receives and split message, saving it to a dictionary 
 def receive_msg(s):
@@ -88,6 +91,7 @@ def receive_msg(s):
     # Empty message has been received. Client has disconnected.
     return None
 
+
 # Process responses received by the emitter only
 def process_msg(msg, s, this_id, seq_id):
   if msg['type'] == 1 and msg['id'] == (seq_id - 1):  # OK msg
@@ -110,6 +114,7 @@ def process_msg(msg, s, this_id, seq_id):
   else:
     # An error has occurred
     print("Messages have not been delivered.")
+
 
 # Setup id for clients by sending the OI message to the server
 def execute_OI(s, oi_id):
@@ -135,6 +140,7 @@ def execute_OI(s, oi_id):
     s.close()
     sys.exit("Couldn't estabilish a proper connection.")
 
+
 # Execute FLW, ending with the program execution
 def execute_FLW(s, orig_id, msg_id):
     # Send FLW message
@@ -147,6 +153,7 @@ def execute_FLW(s, orig_id, msg_id):
     s.close()
     # End program
     sys.exit()
+
 
 # Check if a given string represents an integer
 def represents_int(s):

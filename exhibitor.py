@@ -49,8 +49,8 @@ while True:
       utils.send_OK(exhibitor, this_id, msg['orig_id'], msg['id'])
 
     elif msg['type'] == 7:  # CLIST message
-      print("There are", msg['msg'][0], "clients connected to the server. Thes"
-            "e are their ids:", msg['msg'][1])
+      print("There are", msg['msg'][0], "clients connected to the server. "
+            "These are their ids:", msg['msg'][1])
 
       utils.send_OK(exhibitor, this_id, msg['orig_id'], msg['id'])
   except KeyboardInterrupt:
