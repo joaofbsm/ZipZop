@@ -14,7 +14,7 @@ __author__ = "João Francisco Martins and Victor Bernardo Jorge"
 
 #====================================MAIN=====================================#
 
-HOST = socket.gethostbyname(socket.getfqdn())
+HOST = ""
 PORT = int(sys.argv[1])
 ADDR = (HOST, PORT)
 
@@ -27,9 +27,6 @@ server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
 # Set socket server to listen at given address
 server.bind(ADDR)
 server.listen(1)
-
-print("[LOG] Server is now running at address ", HOST, " and port ", PORT, ".",
-      sep = "")
 
 conn_socks = [server]  # Connected Sockets. Server is "connected" to itself
 id_to_sock = {}  # Dictionary that maps client ids to (socket, type)
