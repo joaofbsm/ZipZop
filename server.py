@@ -28,6 +28,8 @@ server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
 server.bind(ADDR)
 server.listen(1)
 
+print("Server is now listening on port ", PORT, ".", sep="")
+
 conn_socks = [server]  # Connected Sockets. Server is "connected" to itself
 id_to_sock = {}  # Dictionary that maps client ids to (socket, type)
 emi_to_exh = {}  # Dictionary that maps emitters to exhibitors
