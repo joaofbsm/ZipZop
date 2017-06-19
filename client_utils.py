@@ -8,7 +8,7 @@ import sys
 import socket
 import struct
 
-__author__ = "João Francisco Martins and Victor Bernardo Jorge"
+__author__ = "João F. Martins, Victor B. Jorge and Alexandre A. Pereira"
 
 #==================================CONSTANTS==================================#
 

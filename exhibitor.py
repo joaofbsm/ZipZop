@@ -9,7 +9,7 @@ import socket
 import struct
 import client_utils as utils
 
-__author__ = "João Francisco Martins and Victor Bernardo Jorge"
+__author__ = "João F. Martins, Victor B. Jorge and Alexandre A. Pereira"
 
 #====================================MAIN=====================================#
 
