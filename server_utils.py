@@ -407,12 +407,15 @@ def kill_client(s, log, conn_socks, id_to_sock, emi_to_exh):
 # If CTRL+C was received, sends FLW to every client and waits for OK response
 def broadcast_FLW(conn_socks, id_to_sock, emi_to_exh):
   print("\n[ANNOUNCEMENT] SERVER IS SHUTTING DOWN.")
-  for client_id in id_to_sock:
+
+  map_copy = id_to_sock.copy()
+  for client_id in map_copy:
     client_socket = id_to_sock[client_id][0]
 
     print("[LOG] Sending FLW message to client ", client_id, ".", sep = "")
     msg = create_msg('FLW', serv_id, client_id, 0)[0]
     deliver_msg(msg, client_socket, conn_socks, id_to_sock, emi_to_exh)
 
+    remove_client(client_id, id_to_sock, emi_to_exh)
     conn_socks.remove(client_socket)
     client_socket.close()
